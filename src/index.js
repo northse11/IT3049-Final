@@ -197,6 +197,7 @@ class Pacman extends Phaser.Scene {
         this.dots = this.physics.add.group();
         this.populateBoardAndEmpties(layer);
         this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
+        this.cursors = this.input.keyboard.createCursorKeys();
 
         // Ghosts Physics Group
         this.ghostsGroup = this.physics.add.group();
@@ -256,6 +257,9 @@ eatDot(pacman, dot){
                 this.updateGhostMovement(ghost, index);
             }
         });
+
+        //pacman controls
+        this.handleDirectionInput();
     }
 
     initializeGhosts() {
@@ -436,6 +440,26 @@ eatDot(pacman, dot){
     getRandomHorizontalDirection() {
         const directions = ['left', 'right'];
         return directions[Phaser.Math.Between(0, 1)];
+    }
+
+    handleDirectionInput() {
+        const arrowKeys = ["left", "right", "up", "down"];
+        for (const key of arrowKeys){
+            if(this.cursors[key].isDown) {
+                if(key === "left") {
+                    this.pacman.setVelocityX(-1*this.speed);
+                }
+                if(key === "right") {
+                    this.pacman.setVelocityX(this.speed);
+                }
+                if(key === "up") {
+                    this.pacman.setVelocityY(-1*this.speed);
+                }
+                if(key === "down") {
+                    this.pacman.setVelocityY(this.speed);
+                }
+    }
+}
     }
 }
 
