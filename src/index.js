@@ -230,10 +230,11 @@ class Pacman extends Phaser.Scene {
         if (!this.board[tile.y]) {
             this.board[tile.y] = [];
         }
-        this.board[tile.y][tile.x] = tile?.index ?? -1;
+        this.board[tile.y][tile.x] = tile.index;
 
         // Filter out areas we don't want dots in
-        if (tile.y < 4 || (tile.y > 11 && tile.y < 23 && tile.x > 6)) {
+        if (tile.y < 3 || (tile.y > 13 && tile.y < 17 && tile.x > 11 && tile.x < 16) || (tile.y == 17
+            && tile.x != 6 && tile.x != 21)) {
             return;
         }
 
@@ -249,7 +250,7 @@ class Pacman extends Phaser.Scene {
             
             const x = tile.x * this.blockSize;
             const y = tile.y * this.blockSize;
-            this.dots.create(x + this.blockSize / 2, y + this.blockSize / 2, "dot");
+            this.dots.create(x + this.blockSize / 2 + 5, y + this.blockSize / 2 + 10, "dot");
             this.eaten++;
         }
     });
