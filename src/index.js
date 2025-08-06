@@ -351,11 +351,26 @@ eatDot(pacman, dot){
         //pacman controls
         this.handleDirectionInput();
         this.handlePacmanMovement();
+        this.teleportPacmanAcrossWorld();
 
         if(this.dots.countActive(true) === 0){
             this.scene.pause();
             this.add.text(200, 290, "YOU WIN!!!!!", { fontSize: '32px', fill: '#fff' });
             console.log("All dots eaten! You win!");
+        }
+    }
+
+    teleportPacmanAcrossWorld() {
+        const worldBounds = this.physics.world.bounds;
+        if(this.pacman.x < worldBounds.x){
+            this.pacman.body.reset(worldBounds.right - this.blockSize, this.pacman.y);
+            this.nextIntersection = this.getNextIntersectionInNextDirection(this.pacman.x, this.pacman.y, "left", this.direction);
+            this.pacman.setVelocityX(-1*this.speed);
+        }
+        if(this.pacman.x > worldBounds.right){
+            this.pacman.body.reset(worldBounds.x + this.blockSize, this.pacman.y);
+            this.nextIntersection = this.getNextIntersectionInNextDirection(this.pacman.x, this.pacman.y, "right", this.direction);
+            this.pacman.setVelocityX(this.speed);
         }
     }
 
