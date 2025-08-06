@@ -19,6 +19,11 @@ class Pacman extends Phaser.Scene {
         this.centerX = 232;
         this.centerY = 220;
 
+        //player properties
+        this.lives = 3;
+        this.dots = 0;
+        this.eaten = 0;
+
         // Weather and level properties
         this.currentLevel = 1;
         this.weatherLoaded = false;
@@ -245,12 +250,14 @@ class Pacman extends Phaser.Scene {
             const x = tile.x * this.blockSize;
             const y = tile.y * this.blockSize;
             this.dots.create(x + this.blockSize / 2, y + this.blockSize / 2, "dot");
+            this.eaten++;
         }
     });
 }
 
 eatDot(pacman, dot){
     dot.disableBody(true, true);
+    this.eaten++;
 }
 
     update(){
@@ -470,10 +477,24 @@ eatDot(pacman, dot){
             }
         }
     }
+
+    resetPacmanPosition() {
+        this.pacman.setVelocity(0, 0);
+        this.pacman.setPosition(240, 448);
+    }
+
     pacmanDies(pacman, ghost) {
+         this.lives--;
+
+    if (this.lives > 0) {
+        console.log(`Pacman was caught by ${ghost.getData('color')} ghost. Lives left: ${this.lives}`);
+        this.resetPacmanPosition();
+
+    } else {
         this.scene.pause();
-        ghost.scene.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
-        console.log(`Pacman was caught by ${ghost.getData('color')} ghost`);
+        this.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
+        console.log(`Pacman was caught by ${ghost.getData('color')} ghost. No lives left. Game Over.`);
+    }
     }
 }
 const config = {
