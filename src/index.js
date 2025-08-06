@@ -102,6 +102,22 @@ class Pacman extends Phaser.Scene {
         // Load appropriate level assets based on weather
         this.loadLevelAssets(this.currentLevel);
 
+        this.load.spritesheet("pacman", "assets/images/pacman0.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman1", "assets/images/pacman1.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman2", "assets/images/pacman2.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman3", "assets/images/pacman3.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman4", "assets/images/pacman4.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+
         this.load.image("dot", "assets/images/dot.png");
         
         // Load ghost images
@@ -160,8 +176,27 @@ class Pacman extends Phaser.Scene {
         
         layer.setCollisionByExclusion(-1, true);
 
+        this.pacman = this.physics.add.sprite(240, 448, "pacman");
+        this.pacman.setDisplaySize(28, 28); // Make Pacman smaller (original is 32x32)
+        this.pacman.body.setSize(28, 28); // Update physics body to match
+        this.anims.create({
+            key: "pacmanAnim",
+            frames: [
+                { key: "pacman", frame: 0 },
+                { key: "pacman1", frame: 0 },
+                { key: "pacman2", frame: 0 },
+                { key: "pacman3", frame: 0 },
+                { key: "pacman4", frame: 0 }
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+        this.pacman.play("pacmanAnim");
+        this.physics.add.collider(this.pacman, layer);
+
         this.dots = this.physics.add.group();
         this.populateBoardAndEmpties(layer);
+        this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
 
         // Ghosts Physics Group
         this.ghostsGroup = this.physics.add.group();
@@ -208,6 +243,10 @@ class Pacman extends Phaser.Scene {
             this.dots.create(x + this.blockSize / 2, y + this.blockSize / 2, "dot");
         }
     });
+}
+
+eatDot(pacman, dot){
+    dot.disableBody(true, true);
 }
 
     update(){
