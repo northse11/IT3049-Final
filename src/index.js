@@ -22,11 +22,11 @@ class Pacman extends Phaser.Scene {
         // Weather and level properties
         this.currentLevel = 1;
         this.weatherLoaded = false;
-        this.API_KEY = 'a7ae5df58ebf9cb73ed9ae2b01b0bdd6';
+        this.API_KEY = '83afd44f94bfe725eb51047a18c6da34';
     }
 
     async fetchWeatherData() {
-        if (!this.API_KEY || this.API_KEY === 'a7ae5df58ebf9cb73ed9ae2b01b0bdd6') {
+        if (!this.API_KEY || this.API_KEY === '83afd44f94bfe725eb51047a18c6da34') {
             console.log('No weather API key configured. Using default level 1.');
             return { temperature: 20, city: 'Default' };
         }
