@@ -18,11 +18,107 @@ class Pacman extends Phaser.Scene {
         this.ghostsReleased = 0;
         this.centerX = 232;
         this.centerY = 220;
+
+        // Weather and level properties
+        this.currentLevel = 1;
+        this.weatherLoaded = false;
+        this.API_KEY = '83afd44f94bfe725eb51047a18c6da34';
     }
 
-    preload(){
-        this.load.image("Tileset generic", "assets/levels/1/Tileset generic.png");
-        this.load.tilemapTiledJSON("map", "assets/levels/1/pacman-generic-map.json");
+    async fetchWeatherData() {
+        if (!this.API_KEY || this.API_KEY === '83afd44f94bfe725eb51047a18c6da34') {
+            console.log('No weather API key configured. Using default level 1.');
+            return { temperature: 20, city: 'Default' };
+        }
+
+        try {
+            if (navigator.geolocation) {
+                return new Promise((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            const weather = await this.getWeatherByCoords(lat, lon);
+                            resolve(weather);
+                        },
+                        async () => {
+                            console.log('Geolocation failed, using default city (London)');
+                            const weather = await this.getWeatherByCity('London');
+                            resolve(weather);
+                        }
+                    );
+                });
+            } else {
+                console.log('Geolocation not supported, using default city (London)');
+                return await this.getWeatherByCity('London');
+            }
+        } catch (error) {
+            console.error('Error fetching weather:', error);
+            return { temperature: 20, city: 'Error' };
+        }
+    }
+
+    async getWeatherByCoords(lat, lon) {
+        const response = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${this.API_KEY}&units=metric`
+        );
+        const data = await response.json();
+        return { temperature: data.main.temp, city: data.name };
+    }
+
+    async getWeatherByCity(city) {
+        const response = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${this.API_KEY}&units=metric`
+        );
+        const data = await response.json();
+        return { temperature: data.main.temp, city: data.name };
+    }
+
+    determineLevelFromTemperature(temperature) {
+        console.log(`Current temperature: ${temperature}°C`);
+        
+        if (temperature <= 10) {
+            console.log('Cold weather detected - Loading ICE level (Level 2)');
+            return 2;
+        } else if (temperature >= 25) {
+            console.log('Hot weather detected - Loading DESERT level (Level 3)');
+            return 3;
+        } else {
+            console.log('Normal weather detected - Loading GENERIC level (Level 1)');
+            return 1;
+        }
+    }
+
+    preload() {
+    if (!this.weatherLoaded) {
+        this.fetchWeatherData().then((weatherData) => {
+            this.currentLevel = this.determineLevelFromTemperature(weatherData.temperature);
+            this.weatherLoaded = true;
+            this.scene.restart();
+        });
+        return;
+    }
+        
+        // Load appropriate level assets based on weather
+        this.loadLevelAssets(this.currentLevel);
+
+        this.load.spritesheet("pacman", "assets/images/pacman0.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman1", "assets/images/pacman1.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman2", "assets/images/pacman2.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman3", "assets/images/pacman3.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+        this.load.spritesheet("pacman4", "assets/images/pacman4.png", {
+            frameWidth: 32, frameHeight: 32
+        });
+
+        this.load.image("dot", "assets/images/dot.png");
         
         // Load ghost images
         this.load.image("red_ghost", "assets/images/red_ghost.png");
@@ -31,14 +127,83 @@ class Pacman extends Phaser.Scene {
         this.load.image("green_ghost", "assets/images/green_ghost.png");
     }
 
+    loadLevelAssets(level) {
+        switch(level) {
+            case 1:
+                this.load.image("Tileset generic", "assets/levels/1/Tileset generic.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/1/pacman-generic-map.json");
+                break;
+            case 2:
+                this.load.image("Tileset ice & desert", "assets/levels/2/Tileset ice & desert.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/2/pacman-ice-map.json");
+                break;
+            case 3:
+                this.load.image("Tileset ice & desert", "assets/levels/3/Tileset ice & desert.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/3/pacman-desert-map.json");
+                break;
+        }
+    }
+
+
     create(){
+        // Weather data should be loaded by now
         this.map = this.make.tilemap({ key: "map" });
-        const tileset = this.map.addTilesetImage("Tileset generic");
+         
+        // Use the appropriate tileset based on current level
+        let tileset;
+        switch(this.currentLevel) {
+            case 1:
+                tileset = this.map.addTilesetImage("Tileset generic", "Tileset generic");
+                break;
+            case 2:
+            case 3:
+                tileset = this.map.addTilesetImage("Tileset ice & desert", "Tileset ice & desert");
+                break;
+            default:
+                tileset = this.map.addTilesetImage("Tileset generic", "Tileset generic");
+        }
+        
+        if (!tileset) {
+            console.error('Failed to create tileset for level:', this.currentLevel);
+            return;
+        }
+        
         const layer = this.map.createLayer("Tile Layer 1", tileset);
+        if (!layer) {
+            console.error('Failed to create layer');
+            return;
+        }
+        
         layer.setCollisionByExclusion(-1, true);
+
+        this.pacman = this.physics.add.sprite(240, 448, "pacman");
+        this.pacman.setDisplaySize(28, 28); // Make Pacman smaller (original is 32x32)
+        this.pacman.body.setSize(28, 28); // Update physics body to match
+        this.anims.create({
+            key: "pacmanAnim",
+            frames: [
+                { key: "pacman", frame: 0 },
+                { key: "pacman1", frame: 0 },
+                { key: "pacman2", frame: 0 },
+                { key: "pacman3", frame: 0 },
+                { key: "pacman4", frame: 0 }
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+        this.pacman.play("pacmanAnim");
+        this.physics.add.collider(this.pacman, layer);
 
         // Ghosts Physics Group
         this.ghostsGroup = this.physics.add.group();
+
+
+        this.dots = this.physics.add.group();
+        this.populateBoardAndEmpties(layer);
+        this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.physics.add.overlap(this.pacman, this.ghostsGroup, this.pacmanDies, null, this);
+
         
         // Initialize all ghosts
         this.initializeGhosts();
@@ -51,7 +216,42 @@ class Pacman extends Phaser.Scene {
             callbackScope: this,
             repeat: 2
         });
+        // Display current level info
+        console.log(`Game started with Level ${this.currentLevel}`);
     }
+
+    populateBoardAndEmpties(layer) {
+    layer.forEachTile(tile => {
+        if (!this.board[tile.y]) {
+            this.board[tile.y] = [];
+        }
+        this.board[tile.y][tile.x] = tile.index;
+
+        // Filter out areas we don't want dots in
+        if (tile.y < 3 || (tile.y > 13 && tile.y < 17 && tile.x > 11 && tile.x < 16) || (tile.y == 17
+            && tile.x != 6 && tile.x != 21)) {
+            return;
+        }
+        const rightTile = this.map.getTileAt(tile.x + 1, tile.y, true, "Tile Layer 1");
+        const bottomTile = this.map.getTileAt(tile.x, tile.y + 1, true, "Tile Layer 1");
+        const rightBottomTile = this.map.getTileAt(tile.x + 1, tile.y + 1, true, "Tile Layer 1");
+
+        // Change check from tile.index === -1 to tile == null OR !tile || tile.index === -1
+        if ((!tile || tile.index === -1) &&
+            (!rightTile || rightTile.index === -1) &&
+            (!bottomTile || bottomTile.index === -1) &&
+            (!rightBottomTile || rightBottomTile.index === -1)) {
+            
+            const x = tile.x * this.blockSize;
+            const y = tile.y * this.blockSize;
+            this.dots.create(x + this.blockSize / 2 + 5, y + this.blockSize / 2 + 10, "dot");
+        }
+    });
+}
+
+eatDot(pacman, dot){
+    dot.disableBody(true, true);
+}
 
     update(){
         // Ghost movement
@@ -60,6 +260,15 @@ class Pacman extends Phaser.Scene {
                 this.updateGhostMovement(ghost, index);
             }
         });
+
+        //pacman controls
+        this.handleDirectionInput();
+
+        if(this.dots.countActive(true) === 0){
+            this.scene.pause();
+            this.add.text(200, 290, "YOU WIN!!!!!", { fontSize: '32px', fill: '#fff' });
+            console.log("All dots eaten! You win!");
+        }
     }
 
     initializeGhosts() {
@@ -241,8 +450,32 @@ class Pacman extends Phaser.Scene {
         const directions = ['left', 'right'];
         return directions[Phaser.Math.Between(0, 1)];
     }
-}
 
+    handleDirectionInput() {
+        const arrowKeys = ["left", "right", "up", "down"];
+        for (const key of arrowKeys){
+            if(this.cursors[key].isDown) {
+                if(key === "left") {
+                    this.pacman.setVelocityX(-1*this.speed);
+                }
+                if(key === "right") {
+                    this.pacman.setVelocityX(this.speed);
+                }
+                if(key === "up") {
+                    this.pacman.setVelocityY(-1*this.speed);
+                }
+                if(key === "down") {
+                    this.pacman.setVelocityY(this.speed);
+                }
+            }
+        }
+    }
+    pacmanDies(pacman, ghost) {
+        this.scene.pause();
+        ghost.scene.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
+        console.log(`Pacman was caught by ${ghost.getData('color')} ghost`);
+    }
+}
 const config = {
     type: Phaser.AUTO,
     width: 464,
