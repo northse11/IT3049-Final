@@ -89,21 +89,20 @@ class Pacman extends Phaser.Scene {
         }
     }
 
-    preload(){
-        // Check if weather data is already loaded
-        if (!this.weatherLoaded) {
-            // If not loaded, start the weather fetch and restart preload
-            this.fetchWeatherData().then((weatherData) => {
-                this.currentLevel = this.determineLevelFromTemperature(weatherData.temperature);
-                this.weatherLoaded = true;
-                // Restart the scene to reload with correct assets
-                this.scene.restart();
-            });
-            return;
-        }
+    preload() {
+    if (!this.weatherLoaded) {
+        this.fetchWeatherData().then((weatherData) => {
+            this.currentLevel = this.determineLevelFromTemperature(weatherData.temperature);
+            this.weatherLoaded = true;
+            this.scene.restart();
+        });
+        return;
+    }
         
         // Load appropriate level assets based on weather
         this.loadLevelAssets(this.currentLevel);
+
+        this.load.image("dot", "assets/images/dot.png");
         
         // Load ghost images
         this.load.image("red_ghost", "assets/images/red_ghost.png");
@@ -161,6 +160,9 @@ class Pacman extends Phaser.Scene {
         
         layer.setCollisionByExclusion(-1, true);
 
+        this.dots = this.physics.add.group();
+        this.populateBoardAndEmpties(layer);
+
         // Ghosts Physics Group
         this.ghostsGroup = this.physics.add.group();
         
@@ -179,7 +181,34 @@ class Pacman extends Phaser.Scene {
         console.log(`Game started with Level ${this.currentLevel}`);
     }
 
-    
+    populateBoardAndEmpties(layer) {
+    layer.forEachTile(tile => {
+        if (!this.board[tile.y]) {
+            this.board[tile.y] = [];
+        }
+        this.board[tile.y][tile.x] = tile?.index ?? -1;
+
+        // Filter out areas we don't want dots in
+        if (tile.y < 4 || (tile.y > 11 && tile.y < 23 && tile.x > 6)) {
+            return;
+        }
+
+        const rightTile = this.map.getTileAt(tile.x + 1, tile.y, true, "Tile Layer 1");
+        const bottomTile = this.map.getTileAt(tile.x, tile.y + 1, true, "Tile Layer 1");
+        const rightBottomTile = this.map.getTileAt(tile.x + 1, tile.y + 1, true, "Tile Layer 1");
+
+        // Change check from tile.index === -1 to tile == null OR !tile || tile.index === -1
+        if ((!tile || tile.index === -1) &&
+            (!rightTile || rightTile.index === -1) &&
+            (!bottomTile || bottomTile.index === -1) &&
+            (!rightBottomTile || rightBottomTile.index === -1)) {
+            
+            const x = tile.x * this.blockSize;
+            const y = tile.y * this.blockSize;
+            this.dots.create(x + this.blockSize / 2, y + this.blockSize / 2, "dot");
+        }
+    });
+}
 
     update(){
         // Ghost movement
