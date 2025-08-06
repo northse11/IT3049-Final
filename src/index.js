@@ -482,6 +482,10 @@ eatDot(pacman, dot){
     resetPacmanPosition() {
         this.pacman.setVelocity(0, 0);
         this.pacman.setPosition(240, 448);
+        //send the ghosts back to the center
+        this.ghostsGroup.children.iterate(ghost => {
+            ghost.setPosition(this.centerX, this.centerY);
+        });
     }
 
     pacmanDies(pacman, ghost) {
