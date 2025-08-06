@@ -18,11 +18,92 @@ class Pacman extends Phaser.Scene {
         this.ghostsReleased = 0;
         this.centerX = 232;
         this.centerY = 220;
+
+        // Weather and level properties
+        this.currentLevel = 1;
+        this.weatherLoaded = false;
+        this.API_KEY = 'a7ae5df58ebf9cb73ed9ae2b01b0bdd6';
+    }
+
+    async fetchWeatherData() {
+        if (!this.API_KEY || this.API_KEY === 'a7ae5df58ebf9cb73ed9ae2b01b0bdd6') {
+            console.log('No weather API key configured. Using default level 1.');
+            return { temperature: 20, city: 'Default' };
+        }
+
+        try {
+            if (navigator.geolocation) {
+                return new Promise((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            const weather = await this.getWeatherByCoords(lat, lon);
+                            resolve(weather);
+                        },
+                        async () => {
+                            console.log('Geolocation failed, using default city (London)');
+                            const weather = await this.getWeatherByCity('London');
+                            resolve(weather);
+                        }
+                    );
+                });
+            } else {
+                console.log('Geolocation not supported, using default city (London)');
+                return await this.getWeatherByCity('London');
+            }
+        } catch (error) {
+            console.error('Error fetching weather:', error);
+            return { temperature: 20, city: 'Error' };
+        }
+    }
+
+    async getWeatherByCoords(lat, lon) {
+        const response = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${this.API_KEY}&units=metric`
+        );
+        const data = await response.json();
+        return { temperature: data.main.temp, city: data.name };
+    }
+
+    async getWeatherByCity(city) {
+        const response = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${this.API_KEY}&units=metric`
+        );
+        const data = await response.json();
+        return { temperature: data.main.temp, city: data.name };
+    }
+
+    determineLevelFromTemperature(temperature) {
+        console.log(`Current temperature: ${temperature}°C`);
+        
+        if (temperature <= 10) {
+            console.log('Cold weather detected - Loading ICE level (Level 2)');
+            return 2;
+        } else if (temperature >= 25) {
+            console.log('Hot weather detected - Loading DESERT level (Level 3)');
+            return 3;
+        } else {
+            console.log('Normal weather detected - Loading GENERIC level (Level 1)');
+            return 1;
+        }
     }
 
     preload(){
-        this.load.image("Tileset generic", "assets/levels/1/Tileset generic.png");
-        this.load.tilemapTiledJSON("map", "assets/levels/1/pacman-generic-map.json");
+        // Check if weather data is already loaded
+        if (!this.weatherLoaded) {
+            // If not loaded, start the weather fetch and restart preload
+            this.fetchWeatherData().then((weatherData) => {
+                this.currentLevel = this.determineLevelFromTemperature(weatherData.temperature);
+                this.weatherLoaded = true;
+                // Restart the scene to reload with correct assets
+                this.scene.restart();
+            });
+            return;
+        }
+        
+        // Load appropriate level assets based on weather
+        this.loadLevelAssets(this.currentLevel);
         
         // Load ghost images
         this.load.image("red_ghost", "assets/images/red_ghost.png");
@@ -31,10 +112,53 @@ class Pacman extends Phaser.Scene {
         this.load.image("green_ghost", "assets/images/green_ghost.png");
     }
 
+    loadLevelAssets(level) {
+        switch(level) {
+            case 1:
+                this.load.image("Tileset generic", "assets/levels/1/Tileset generic.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/1/pacman-generic-map.json");
+                break;
+            case 2:
+                this.load.image("Tileset ice & desert", "assets/levels/2/Tileset ice & desert.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/2/pacman-ice-map.json");
+                break;
+            case 3:
+                this.load.image("Tileset ice & desert", "assets/levels/3/Tileset ice & desert.png");
+                this.load.tilemapTiledJSON("map", "assets/levels/3/pacman-desert-map.json");
+                break;
+        }
+    }
+
+
     create(){
+        // Weather data should be loaded by now
         this.map = this.make.tilemap({ key: "map" });
-        const tileset = this.map.addTilesetImage("Tileset generic");
+         
+        // Use the appropriate tileset based on current level
+        let tileset;
+        switch(this.currentLevel) {
+            case 1:
+                tileset = this.map.addTilesetImage("Tileset generic", "Tileset generic");
+                break;
+            case 2:
+            case 3:
+                tileset = this.map.addTilesetImage("Tileset ice & desert", "Tileset ice & desert");
+                break;
+            default:
+                tileset = this.map.addTilesetImage("Tileset generic", "Tileset generic");
+        }
+        
+        if (!tileset) {
+            console.error('Failed to create tileset for level:', this.currentLevel);
+            return;
+        }
+        
         const layer = this.map.createLayer("Tile Layer 1", tileset);
+        if (!layer) {
+            console.error('Failed to create layer');
+            return;
+        }
+        
         layer.setCollisionByExclusion(-1, true);
 
         // Ghosts Physics Group
@@ -51,7 +175,11 @@ class Pacman extends Phaser.Scene {
             callbackScope: this,
             repeat: 2
         });
+        // Display current level info
+        console.log(`Game started with Level ${this.currentLevel}`);
     }
+
+    
 
     update(){
         // Ghost movement
