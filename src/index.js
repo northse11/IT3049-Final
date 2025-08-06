@@ -194,13 +194,16 @@ class Pacman extends Phaser.Scene {
         this.pacman.play("pacmanAnim");
         this.physics.add.collider(this.pacman, layer);
 
+        // Ghosts Physics Group
+        this.ghostsGroup = this.physics.add.group();
+
+
         this.dots = this.physics.add.group();
         this.populateBoardAndEmpties(layer);
         this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
         this.cursors = this.input.keyboard.createCursorKeys();
+        this.physics.add.overlap(this.pacman, this.ghostsGroup, this.pacmanDies, null, this);
 
-        // Ghosts Physics Group
-        this.ghostsGroup = this.physics.add.group();
         
         // Initialize all ghosts
         this.initializeGhosts();
@@ -260,6 +263,12 @@ eatDot(pacman, dot){
 
         //pacman controls
         this.handleDirectionInput();
+
+        if(this.dots.countActive(true) === 0){
+            this.scene.pause();
+            this.add.text(200, 290, "YOU WIN!!!!!", { fontSize: '32px', fill: '#fff' });
+            console.log("All dots eaten! You win!");
+        }
     }
 
     initializeGhosts() {
@@ -458,11 +467,15 @@ eatDot(pacman, dot){
                 if(key === "down") {
                     this.pacman.setVelocityY(this.speed);
                 }
+            }
+        }
+    }
+    pacmanDies(pacman, ghost) {
+        this.scene.pause();
+        ghost.scene.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
+        console.log(`Pacman was caught by ${ghost.getData('color')} ghost`);
     }
 }
-    }
-}
-
 const config = {
     type: Phaser.AUTO,
     width: 464,
