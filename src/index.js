@@ -184,6 +184,11 @@ class Pacman extends Phaser.Scene {
         this.pacman = this.physics.add.sprite(240, 448, "pacman");
         this.pacman.setDisplaySize(28, 28); // Make Pacman smaller (original is 32x32)
         this.pacman.body.setSize(28, 28); // Update physics body to match
+        
+        // Initialize direction to null so movement can start
+        this.direction = null;
+        this.previousDirection = null;
+        
         this.anims.create({
             key: "pacmanAnim",
             frames: [
@@ -202,12 +207,20 @@ class Pacman extends Phaser.Scene {
         // Ghosts Physics Group
         this.ghostsGroup = this.physics.add.group();
 
+        //add wasd too
+        this.wasd = this.input.keyboard.addKeys({
+            up: Phaser.Input.Keyboard.KeyCodes.W,
+            down: Phaser.Input.Keyboard.KeyCodes.S,
+            left: Phaser.Input.Keyboard.KeyCodes.A,
+            right: Phaser.Input.Keyboard.KeyCodes.D
+        });
 
         this.dots = this.physics.add.group();
         this.populateBoardAndEmpties(layer);
         this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
         this.cursors = this.input.keyboard.createCursorKeys();
         this.physics.add.overlap(this.pacman, this.ghostsGroup, this.pacmanDies, null, this);
+        this.detectIntersections();
 
         
         // Initialize all ghosts
@@ -223,6 +236,72 @@ class Pacman extends Phaser.Scene {
         });
         // Display current level info
         console.log(`Game started with Level ${this.currentLevel}`);
+    }
+
+    detectIntersections() {
+        const directions = [
+            {x:-this.blockSize,y:0,name:"left"},
+            {x:this.blockSize,y:0,name:"right"},
+            {x:0,y:-this.blockSize,name:"up"},
+            {x:0,y:this.blockSize,name:"down"}
+        ];
+        const blockSize = this.blockSize;
+        for(let y=0; y<this.map.heightInPixels; y+=blockSize){
+            for(let x=0; x<this.map.widthInPixels; x+=blockSize){
+                if(x%blockSize !== 0 || y%blockSize !== 0){
+                    continue;
+                }
+                if(!this.isPointClear(x,y)) continue;
+                let openPaths = [];
+                directions.forEach(dir => {
+                    if(this.isPathOpenAroundPoint(x + dir.x, y + dir.y)){
+                        openPaths.push(dir.name);
+                    }
+                });
+                if(openPaths.length > 2 && y > 64 && y < 530){
+                    this.intersections.push({x:x, y:y, openPaths: openPaths});
+                } else if (openPaths.length === 2 && y>64 && y<530) {
+                    const [dir1,dir2] = openPaths;
+                    if((dir1 === "left" && dir1 === "right") &&
+                    (dir2 === "up" || dir2 === "down") ||
+                    (dir1 === "up" && dir1 === "down") &&
+                    (dir2 === "left" || dir2 === "right")) {
+                        this.intersections.push({x:x, y:y, openPaths: openPaths});
+                    }
+                }
+            }
+        }
+    }
+
+    isPathOpenAroundPoint(pixelX, pixelY) {
+        const corners = [
+            {x: pixelX - 1, y: pixelY - 1},
+            {x: pixelX + 1, y: pixelY - 1},
+            {x: pixelX - 1, y: pixelY + 1},
+            {x: pixelX + 1, y: pixelY + 1}
+        ];
+        return corners.every(corner => {
+            const tileX = Math.floor(corner.x / this.blockSize);
+            const tileY = Math.floor(corner.y / this.blockSize);
+            if(!this.board[tileY] || this.board[tileY][tileX] === -1) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    isPointClear(x, y) {
+        const corners = [
+            {x: x - 1, y: y - 1},
+            {x: x + 1, y: y - 1},
+            {x: x - 1, y: y + 1},
+            {x: x + 1, y: y + 1}
+        ];
+        return corners.every(corner => {
+            const tileX = Math.floor(corner.x / this.blockSize);
+            const tileY = Math.floor(corner.y / this.blockSize);
+            return !this.board[tileY] || this.board[tileY][tileX] === undefined || this.board[tileY][tileX] === -1;
+        });
     }
 
     populateBoardAndEmpties(layer) {
@@ -271,6 +350,7 @@ eatDot(pacman, dot){
 
         //pacman controls
         this.handleDirectionInput();
+        this.handlePacmanMovement();
 
         if(this.dots.countActive(true) === 0){
             this.scene.pause();
@@ -278,6 +358,85 @@ eatDot(pacman, dot){
             console.log("All dots eaten! You win!");
         }
     }
+
+    handlePacmanMovement() {
+        if (!this.direction) {
+            this.pacman.setVelocity(0, 0);
+            return;
+        }
+
+        switch(this.direction) {
+            case "left":
+                this.pacman.setVelocity(-this.speed, 0);
+                this.pacman.setFlipX(true);
+                this.pacman.setFlipY(false);
+                this.pacman.angle = 0;
+                break;
+            case "right":
+                this.pacman.setVelocity(this.speed, 0);
+                this.pacman.setFlipX(false);
+                this.pacman.setFlipY(false);
+                this.pacman.angle = 0;
+                break;
+            case "up":
+                this.pacman.setVelocity(0, -this.speed);
+                this.pacman.setFlipX(false);
+                this.pacman.setFlipY(false);
+                this.pacman.angle = -90;
+                break;
+            case "down":
+                this.pacman.setVelocity(0, this.speed);
+                this.pacman.setFlipX(false);
+                this.pacman.setFlipY(false);
+                this.pacman.angle = 90;
+                break;
+            default:
+                this.pacman.setVelocity(0, 0);
+        }
+    }
+
+    handleMovementInDirection(currentDirection, oppositeDirection, pacmanPosition, intersectionPosition, movingCoordinate, flipX, flipY, angle, velocityX, velocityY, currentVelocity) {
+        let perpendicularDirection = currentDirection === "left" || currentDirection === "right" ? ["up", "down"] : ["left", "right"];
+        let condition = false;
+        if(this.nextIntersection){
+            condition = (this.previousDirection == perpendicularDirection[0] &&
+                pacmanPosition < intersectionPosition) || (this.previousDirection == perpendicularDirection[1] && pacmanPosition > intersectionPosition) ||
+                this.previousDirection === oppositeDirection;
+                if(condition) {
+                    let newPosition = intersectionPosition;
+                    if(currentDirection === "left" || currentDirection === "right") {
+                        this.pacman.body.reset(movingCoordinate, newPosition);
+                    }
+                    else{
+                        this.pacman.body.reset(newPosition, movingCoordinate);
+                    }
+                    this.changeDirection(flipX, flipY, angle, velocityX, velocityY);
+                    this.adjustPacmanPosition(velocityX, velocityY);
+                } else if (currentVelocity === 0){
+                    this.adjustPacmanPosition(velocityX, velocityY);
+                }
+        }
+    }
+
+    adjustPacmanPosition(velocityX, velocityY) {
+        if(this.pacman.x%this.blockSize !== 0 && velocityY > 0){
+            let nearestMultiple = Math.round(this.pacman.x / this.blockSize) * this.blockSize;
+            this.pacman.body.reset(nearestMultiple, this.pacman.y);
+        }
+        if(this.pacman.y%this.blockSize !== 0 && velocityX > 0){
+            let nearestMultiple = Math.round(this.pacman.y / this.blockSize) * this.blockSize;
+            this.pacman.body.reset(this.pacman.x, nearestMultiple);
+        }
+    }
+
+    changeDirection(flipX, flipY, angle, velocityX, velocityY) {
+        this.pacman.setVelocity(velocityX, velocityY);
+        this.pacman.setFlipX(flipX);
+        this.pacman.setFlipY(flipY);
+        this.pacman.angle = angle;
+    }
+
+
 
     initializeGhosts() {
         // Create all 4 ghosts at the center position
@@ -460,22 +619,66 @@ eatDot(pacman, dot){
     }
 
     handleDirectionInput() {
-        const arrowKeys = ["left", "right", "up", "down"];
-        for (const key of arrowKeys){
-            if(this.cursors[key].isDown) {
-                if(key === "left") {
-                    this.pacman.setVelocityX(-1*this.speed);
+        const keyMap = {
+            left: this.cursors.left.isDown || this.wasd.left.isDown,
+            right: this.cursors.right.isDown || this.wasd.right.isDown,
+            up: this.cursors.up.isDown || this.wasd.up.isDown,
+            down: this.cursors.down.isDown || this.wasd.down.isDown
+        };
+
+        for (const key in keyMap) {
+            if (keyMap[key]) {
+                console.log(`Key pressed: ${key}`); // Debug log
+                if (this.direction !== key) {
+                    this.previousDirection = this.direction;
+                    this.direction = key;
+                    console.log(`Direction changed from ${this.previousDirection} to ${this.direction}`); // Debug log
+                    this.nextIntersection = this.getNextIntersectionInNextDirection(
+                        this.pacman.x, this.pacman.y,
+                        this.previousDirection, key
+                    );
                 }
-                if(key === "right") {
-                    this.pacman.setVelocityX(this.speed);
-                }
-                if(key === "up") {
-                    this.pacman.setVelocityY(-1*this.speed);
-                }
-                if(key === "down") {
-                    this.pacman.setVelocityY(this.speed);
-                }
+                break;
             }
+        }
+    }
+
+    getNextIntersectionInNextDirection(nowX, nowY, currentDirection, nextDirection) {
+        let filteredInsections;
+        const isUp = currentDirection === "up";
+        const isDown = currentDirection === "down";
+        const isLeft = currentDirection === "left";
+        const isRight = currentDirection === "right";
+        filteredInsections = this.intersections.filter(intersection => {
+            return(
+                ((isUp && intersection.x === nowX && intersection.y < nowY) ||
+                (isDown && intersection.x === nowX && intersection.y > nowY) ||
+                (isLeft && intersection.y < nowY && intersection.x > nowX) ||
+                (isRight && intersection.y > nowY && intersection.x < nowX)) &&
+                this.isIntersectionInDirection(intersection, nextDirection)
+            );
+        }).sort((a, b) => {
+            if(isUp || isDown){
+                return isUp ? b.y-a.y : a.y-b.y;
+            } else {
+                return isLeft ? b.x-a.x : a.x-b.x;
+            }
+    });
+    return filteredInsections ? filteredInsections[0] : null;
+}
+
+    isIntersectionInDirection(intersection, direction) {
+        switch(direction) {
+            case "up":
+                return intersection.openPaths.includes("up");
+            case "down":
+                return intersection.openPaths.includes("down");
+            case "left":
+                return intersection.openPaths.includes("left");
+            case "right":
+                return intersection.openPaths.includes("right");
+            default:
+                return false;
         }
     }
 
