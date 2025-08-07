@@ -24,6 +24,12 @@ class Pacman extends Phaser.Scene {
         this.dots = 0;
         this.eaten = 0;
 
+        this.powerPills = null;
+        this.powerMode = false;
+        this.powerModeTimer = null;
+        this.powerModeDuration = 10000;
+        this.vulnerableGhosts = [];
+
         // Weather and level properties
         this.currentLevel = 1;
         this.weatherLoaded = false;
@@ -124,6 +130,7 @@ class Pacman extends Phaser.Scene {
         });
 
         this.load.image("dot", "assets/images/dot.png");
+        this.load.image("power_pill", "assets/images/spr_power_pill.png");
         
         // Load ghost images
         this.load.image("red_ghost", "assets/images/red_ghost.png");
@@ -151,10 +158,8 @@ class Pacman extends Phaser.Scene {
 
 
     create(){
-        // Weather data should be loaded by now
         this.map = this.make.tilemap({ key: "map" });
          
-        // Use the appropriate tileset based on current level
         let tileset;
         switch(this.currentLevel) {
             case 1:
@@ -182,8 +187,8 @@ class Pacman extends Phaser.Scene {
         layer.setCollisionByExclusion(-1, true);
 
         this.pacman = this.physics.add.sprite(240, 448, "pacman");
-        this.pacman.setDisplaySize(28, 28); // Make Pacman smaller (original is 32x32)
-        this.pacman.body.setSize(28, 28); // Update physics body to match
+        this.pacman.setDisplaySize(28, 28); 
+        this.pacman.body.setSize(28, 28); 
         
         // Initialize direction to null so movement can start
         this.direction = null;
@@ -216,8 +221,11 @@ class Pacman extends Phaser.Scene {
         });
 
         this.dots = this.physics.add.group();
+        this.powerPills = this.physics.add.group();
         this.populateBoardAndEmpties(layer);
+        this.createPowerPills();
         this.physics.add.overlap(this.pacman, this.dots, this.eatDot, null, this);
+        this.physics.add.overlap(this.pacman, this.powerPills, this.eatPowerPill, null, this);
         this.cursors = this.input.keyboard.createCursorKeys();
         this.physics.add.overlap(this.pacman, this.ghostsGroup, this.pacmanDies, null, this);
         this.detectIntersections();
@@ -330,14 +338,111 @@ class Pacman extends Phaser.Scene {
             const x = tile.x * this.blockSize;
             const y = tile.y * this.blockSize;
             this.dots.create(x + this.blockSize / 2 + 5, y + this.blockSize / 2 + 10, "dot");
-            this.eaten++;
         }
     });
+}
+
+//create power pills instead of fruits so pacman can eat ghosts
+createPowerPills() {
+    const powerPillPositions = [
+        { x: 48, y: 96 },   
+        { x: 416, y: 96 },   
+        { x: 48, y: 512 },  
+        { x: 416, y: 512 } 
+    ];
+
+    powerPillPositions.forEach(pos => {
+        const powerPill = this.powerPills.create(pos.x, pos.y, "power_pill");
+        powerPill.setDisplaySize(16, 16);
+        powerPill.body.setSize(16, 16);
+    });
+}
+
+eatPowerPill(pacman, powerPill) {
+    powerPill.disableBody(true, true);
+    this.activatePowerMode();
+}
+
+activatePowerMode() {
+    console.log("Power mode activated!");
+    this.powerMode = true;
+    
+    // Make all active ghosts vulnerable
+    this.ghostSprites.forEach(ghost => {
+        if (ghost.visible && ghost.active) {
+            this.makeGhostVulnerable(ghost);
+        }
+    });
+
+    // Clear any existing power mode timer
+    if (this.powerModeTimer) {
+        this.powerModeTimer.destroy();
+    }
+
+    // Set timer for power mode to end
+    this.powerModeTimer = this.time.addEvent({
+        delay: this.powerModeDuration,
+        callback: this.deactivatePowerMode,
+        callbackScope: this
+    });
+}
+
+//logic to make ghosts vulnerable or "power up" pacman when he eats the power pill
+makeGhostVulnerable(ghost) {
+    ghost.setTint(0x0000ff);
+    ghost.setData('vulnerable', true);
+    ghost.setData('originalColor', ghost.getData('color'));
+    
+    ghost.setData('vulnerableSpeed', 40);
+    
+    // Add flashing effect for the last 3 seconds
+    this.time.addEvent({
+        delay: this.powerModeDuration - 3000,
+        callback: () => {
+            if (ghost.getData('vulnerable')) {
+                ghost.setData('flashTween', this.tweens.add({
+                    targets: ghost,
+                    alpha: 0.3,
+                    duration: 200,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                }));
+            }
+        },
+        callbackScope: this
+    });
+}
+
+deactivatePowerMode() {
+    console.log("Power mode deactivated!");
+    this.powerMode = false;
+    this.ghostSprites.forEach(ghost => {
+        if (ghost.getData('vulnerable')) {
+            this.restoreGhost(ghost);
+        }
+    });
+}
+
+//respawn the ghost after being eaten
+restoreGhost(ghost) {
+    ghost.clearTint();
+    ghost.setAlpha(1);
+    ghost.setData('vulnerable', false);
+    ghost.setData('vulnerableSpeed', undefined);
+    
+    // Stop any flashing animation
+    const flashTween = ghost.getData('flashTween');
+    if (flashTween) {
+        flashTween.destroy();
+        ghost.setData('flashTween', undefined);
+    }
 }
 
 eatDot(pacman, dot){
     dot.disableBody(true, true);
     this.eaten++;
+    console.log(`Dots remaining: ${this.dots.countActive(true)}, Power pills remaining: ${this.powerPills.countActive(true)}`);
 }
 
     update(){
@@ -353,10 +458,31 @@ eatDot(pacman, dot){
         this.handlePacmanMovement();
         this.teleportPacmanAcrossWorld();
 
-        if(this.dots.countActive(true) === 0){
+        // Update power mode visual feedback
+        if (this.powerMode) {
+            // Add some visual feedback for power mode
+            if (!this.powerModeText) {
+                this.powerModeText = this.add.text(10, 10, 'POWER MODE!', { 
+                    fontSize: '20px', 
+                    fill: '#ffff00',
+                    fontWeight: 'bold' 
+                });
+            }
+            
+            // Update remaining time
+            if (this.powerModeTimer) {
+                const remainingTime = Math.ceil((this.powerModeTimer.delay - this.powerModeTimer.elapsed) / 1000);
+                this.powerModeText.setText(`POWER MODE! ${remainingTime}s`);
+            }
+        } else if (this.powerModeText) {
+            this.powerModeText.destroy();
+            this.powerModeText = null;
+        }
+
+        if(this.dots.countActive(true) === 0 && this.powerPills.countActive(true) === 0){
             this.scene.pause();
             this.add.text(200, 290, "YOU WIN!!!!!", { fontSize: '32px', fill: '#fff' });
-            console.log("All dots eaten! You win!");
+            console.log("All dots and power pills eaten! You win!");
         }
     }
 
@@ -513,7 +639,8 @@ eatDot(pacman, dot){
     }
 
     moveGhost(ghost, direction) {
-        const speed = 80;
+        // Use vulnerable speed if ghost is vulnerable, otherwise normal speed
+        const speed = ghost.getData('vulnerable') ? ghost.getData('vulnerableSpeed') || 40 : 80;
         
         this.checkGhostTunnel(ghost);
         
@@ -707,17 +834,47 @@ eatDot(pacman, dot){
     }
 
     pacmanDies(pacman, ghost) {
-         this.lives--;
+        // Check if ghost is vulnerable and can be eaten
+        if (this.powerMode && ghost.getData('vulnerable')) {
+            this.eatGhost(ghost);
+            return;
+        }
 
-    if (this.lives > 0) {
-        console.log(`Pacman was caught by ${ghost.getData('color')} ghost. Lives left: ${this.lives}`);
-        this.resetPacmanPosition();
+        // Normal collision - Pacman dies
+        this.lives--;
 
-    } else {
-        this.scene.pause();
-        this.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
-        console.log(`Pacman was caught by ${ghost.getData('color')} ghost. No lives left. Game Over.`);
+        if (this.lives > 0) {
+            console.log(`Pacman was caught by ${ghost.getData('color')} ghost. Lives left: ${this.lives}`);
+            this.resetPacmanPosition();
+        } else {
+            this.scene.pause();
+            this.add.text(120, 250, 'Game Over', { fontSize: '32px', fill: '#fff' });
+            console.log(`Pacman was caught by ${ghost.getData('color')} ghost. No lives left. Game Over.`);
+        }
     }
+
+
+    //logic to eat the ghost when pacman gets a power pill
+    eatGhost(ghost) {
+        console.log(`Pacman ate the ${ghost.getData('color')} ghost!`);
+        ghost.setVisible(false);
+        ghost.setActive(false);
+        ghost.setVelocity(0, 0);
+        
+        // Respawn ghost after 5 seconds at center
+        this.time.addEvent({
+            delay: 5000,
+            callback: () => {
+                ghost.setPosition(this.centerX, this.centerY);
+                ghost.setVisible(true);
+                ghost.setActive(true);
+                this.restoreGhost(ghost);
+                ghost.setData('direction', 'up');
+                ghost.setData('lastDirectionChange', this.time.now);
+                console.log(`${ghost.getData('color')} ghost respawned!`);
+            },
+            callbackScope: this
+        });
     }
 }
 const config = {
