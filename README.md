@@ -6,4 +6,4 @@
 - **Level 2**: Ice tileset (cold weather)
 - **Level 3**: Desert tileset (hot weather)
 
-we followed along with some guidance from the phaser pacman tutorial on the official phaser website
+we followed along with some guidance and used a few assets from the phaser pacman tutorial on the official phaser website
